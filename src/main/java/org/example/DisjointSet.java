@@ -4,45 +4,38 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+class OpCounter {
+    public long count = 0;
+    public void increment() { count++; }
+    public void add(long val) { count += val; }
+}
+
 class DisjointSet {
     private Map<String, String> parent = new HashMap<>();
+    private OpCounter opCounter;
 
-    /**
-     * Initializes the DSU structure, with each node as its own parent.
-     * @param nodes The set of all nodes (vertices) in the graph.
-     */
-    public DisjointSet(Set<String> nodes) {
+    public DisjointSet(Set<String> nodes, OpCounter counter) {
+        this.opCounter = counter;
         for (String node : nodes) {
             parent.put(node, node);
         }
     }
 
-    /**
-     * Finds the representative (root) of the set that 'node' belongs to.
-     * Implements path compression for efficiency.
-     * @param node The node to find.
-     * @return The representative of the set.
-     */
     public String find(String node) {
+        opCounter.increment(); // Count each find call
         if (parent.get(node).equals(node)) {
             return node;
         }
-        // Path compression: set parent directly to the root
         String root = find(parent.get(node));
-        parent.put(node, root);
+        parent.put(node, root); // Path compression
         return root;
     }
 
-    /**
-     * Merges the sets containing node 'a' and node 'b'.
-     * @param a A node in the first set.
-     * @param b A node in the second set.
-     */
     public void union(String a, String b) {
+        opCounter.increment(); // Count each union call
         String rootA = find(a);
         String rootB = find(b);
         if (!rootA.equals(rootB)) {
-            // Simple union: make one root the parent of the other
             parent.put(rootA, rootB);
         }
     }

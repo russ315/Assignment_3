@@ -1,108 +1,121 @@
 package org.example;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class MSTAlgorithms {
 
-    /**
-     * Finds the Minimum Spanning Tree (MST) using Kruskal's algorithm.
-     *
-     * @param nodes The set of all vertex names.
-     * @param edges The list of all edges in the graph.
-     * @return A Map containing the MST edge list ("mst") and total cost ("cost").
-     */
-    public static Map<String, Object> kruskalAlgorithm(Set<String> nodes, List<Edge> edges) {
+    public static AlgorithmStats kruskalAlgorithm(Set<String> nodes, List<EdgeDef> edgeDefs) {
+        OpCounter counter = new OpCounter();
+        long startTime = System.nanoTime();
+
         List<Edge> mst = new ArrayList<>();
         int totalCost = 0;
 
-        // 1. Sort all edges in non-decreasing order of their weight.
+        // Convert EdgeDefs to Edges with counters
+        List<Edge> edges = edgeDefs.stream()
+                .map(ed -> new Edge(ed.from, ed.to, ed.weight, counter))
+                .collect(Collectors.toList());
+
+        // 1. Sort edges. Comparisons are counted by Edge.compareTo()
         Collections.sort(edges);
 
-        // 2. Initialize a DisjointSet structure for all vertices.
-        DisjointSet ds = new DisjointSet(nodes);
+        // 2. Initialize DSU
+        DisjointSet ds = new DisjointSet(nodes, counter);
 
-        // 3. Iterate through all sorted edges.
+        // 3. Iterate
         for (Edge edge : edges) {
+            counter.increment(); // Count loop iteration/edge consideration
             String rootFrom = ds.find(edge.from);
             String rootTo = ds.find(edge.to);
 
-            // 4. If including this edge does not form a cycle, include it.
             if (!rootFrom.equals(rootTo)) {
                 mst.add(edge);
                 totalCost += edge.weight;
-                ds.union(edge.from, edge.to); // 5. Union the two sets.
+                ds.union(edge.from, edge.to);
             }
         }
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("mst", mst);
-        result.put("cost", totalCost);
-        return result;
+        long endTime = System.nanoTime();
+        double execTimeMs = (endTime - startTime) / 1_000_000.0;
+
+        List<EdgeDef> mstDefs = mst.stream().map(Edge::toEdgeDef).collect(Collectors.toList());
+        return new AlgorithmStats(mstDefs, totalCost, counter.count, execTimeMs);
     }
-    /**
-     * Finds the Minimum Spanning Tree (MST) using Prim's algorithm.
-     *
-     * @param nodes The set of all vertex names.
-     * @param adj An adjacency list representation of the graph.
-     * @return A Map containing the MST edge list ("mst") and total cost ("cost").
-     */
-    public static Map<String, Object> primAlgorithm(Set<String> nodes, Map<String, List<Edge>> adj) {
+
+    public static AlgorithmStats primAlgorithm(Set<String> nodes, List<EdgeDef> edgeDefs) {
+        OpCounter counter = new OpCounter();
+        long startTime = System.nanoTime();
+
         List<Edge> mst = new ArrayList<>();
         int totalCost = 0;
 
-        // 1. Initialize a PriorityQueue to store edges, ordered by min weight.
-        PriorityQueue<Edge> pq = new PriorityQueue<>();
+        // Build adjacency list
+        Map<String, List<Edge>> adj = new HashMap<>();
+        for (String node : nodes) {
+            adj.put(node, new ArrayList<>());
+        }
+        for (EdgeDef ed : edgeDefs) {
+            // Give counter to edges for PriorityQueue comparisons
+            Edge edge = new Edge(ed.from, ed.to, ed.weight, counter);
+            adj.get(ed.from).add(edge);
+            adj.get(ed.to).add(edge);
+        }
 
-        // 2. Keep track of vertices already included in the MST.
+        PriorityQueue<Edge> pq = new PriorityQueue<>();
         Set<String> visited = new HashSet<>();
 
-        // 3. Start from an arbitrary vertex (e.g., the first in the set).
         if (nodes.isEmpty()) {
-            return Collections.emptyMap(); // Handle empty graph
+            return new AlgorithmStats(Collections.emptyList(), 0, 0, 0.0);
         }
+
         String startNode = nodes.iterator().next();
         visited.add(startNode);
+        counter.increment(); // visited.add()
 
-        // 4. Add all edges from the starting node to the priority queue.
         for (Edge edge : adj.getOrDefault(startNode, Collections.emptyList())) {
             pq.add(edge);
+            counter.increment(); // pq.add()
         }
 
-        // 5. Loop until the MST is complete (V-1 edges) or PQ is empty.
         while (!pq.isEmpty() && mst.size() < nodes.size() - 1) {
-            // 6. Get the smallest-weight edge from the PQ.
             Edge minEdge = pq.poll();
+            counter.increment(); // pq.poll()
 
-            // 7. Find the node that is not yet in the visited set.
             String unvisitedNode = null;
+            counter.increment(); // visited.contains()
             if (visited.contains(minEdge.from) && !visited.contains(minEdge.to)) {
+                counter.increment(); // visited.contains()
                 unvisitedNode = minEdge.to;
             } else if (visited.contains(minEdge.to) && !visited.contains(minEdge.from)) {
+                counter.increment(); // visited.contains()
                 unvisitedNode = minEdge.from;
             }
 
-            // 8. If both are visited, this edge forms a cycle, so skip it.
             if (unvisitedNode == null) {
-                continue;
+                continue; // Both visited or both unvisited (shouldn't happen)
             }
 
-            // 9. Add the edge to the MST and the new node to visited.
             visited.add(unvisitedNode);
+            counter.increment(); // visited.add()
             mst.add(minEdge);
             totalCost += minEdge.weight;
 
-            // 10. Add all new adjacent edges (to unvisited nodes) to the PQ.
             for (Edge neighborEdge : adj.getOrDefault(unvisitedNode, Collections.emptyList())) {
                 String adjacentNode = neighborEdge.to.equals(unvisitedNode) ? neighborEdge.from : neighborEdge.to;
+
+                counter.increment(); // visited.contains()
                 if (!visited.contains(adjacentNode)) {
                     pq.add(neighborEdge);
+                    counter.increment(); // pq.add()
                 }
             }
         }
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("mst", mst);
-        result.put("cost", totalCost);
-        return result;
+        long endTime = System.nanoTime();
+        double execTimeMs = (endTime - startTime) / 1_000_000.0;
+
+        List<EdgeDef> mstDefs = mst.stream().map(Edge::toEdgeDef).collect(Collectors.toList());
+        return new AlgorithmStats(mstDefs, totalCost, counter.count, execTimeMs);
     }
 }
